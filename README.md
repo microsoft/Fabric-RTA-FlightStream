@@ -1,14 +1,40 @@
-# Project
+# Microsoft Fabric Real-Time Analytics 
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+## Flight Stream Demo ✈️
 
-As the maintainer of this project, please make a few updates:
+### Description
+Encompasses a use-case using airline flight data for the following Microsoft Fabric features: 
+1. Eventstream 
+2. Notebook
+3. KQL Database
+4. Power BI Report
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+### Scenario 
+1. An aircraft is continuously sending data points in a real-time stream using Microsoft Fabric Eventstream. In Power BI, we see data points indicating a flight has departed Newark international.
+
+James works for the port authority of a large city. His organization manages one of the local international airports. Part of his job is to mitigate noise pollution cause by civil aviation traffic in the area surrounding the airport.
+
+James has access to a real-time feed of aircraft departing from the airport in the last hour stored in Microsoft Fabric KQL Database. Some residents have complained about louder than usual noises in their neighborhood. Part of the port authority’s legal duties is to report any violation of operation procedures to the federal aviation administrations.
+
+2. In a Power BI Report, James zooms in on a few datapoints where the plane has executed a right turn north.
+
+Today James is looking if Flight number 753 has climbed to or above the required 2,500 feet altitude over residential area which is a recommended minimum flight altitude for commercial jet airliners.
+
+3. James hovers over a few points in sequence to show the latitude, longitude and altitude of the aircraft. In Power BI, we see the number is compliant with the regulations.
+
+Upon closer inspection, the plane reached 2,500 feet above an industrial sector and therefore is compliant with the federal recommendations.
+
+This is but a small sample of the air traffic in the area. What if we could automate this? With Fabric real-time analytics, the port authority has defined restricted geographical zones where planes must be compliant with minimal altitude requirements.
+
+With the power of the KQL language and its native geospatial functions, we can now detect in real time the aircrafts that are non-compliant.
+
+4. Additionally, we can display geojson shapes around areas; for example, Newark international. Then we can switch to a Microsoft Fabric KQL Queryset that detects violations to raise alerts using Microsoft Fabric Data Activator Reflex.
+
+Now that we have an easy way to detect these situations, James can focus his effort on proactive noise mitigations by working with air traffic control to avoid these situations in the future.
+
+5. Lastly, we have a KQL Queryset that forecasts the plane’s altitude and uses that to predict if the next data point(s) will be in violation of the noise regulations.
+
+Welcome to the power of Real-time Analytics with Microsoft Fabric! 💚
 
 ## Contributing
 
