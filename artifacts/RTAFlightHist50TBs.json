@@ -1,0 +1,62 @@
+{
+    "name": "RTAFlightHist50TBs",
+    "objectId": "533dacf0-c1ad-4f89-9fc5-bbeed87513eb",
+    "properties": {
+        "activities": [
+            {
+                "name": "Make50",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "typeProperties": {
+                    "variableName": "iterations",
+                    "value": {
+                        "value": "@range(0,50)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Run 50",
+                "description": "sequentially",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Make50",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@variables('iterations')",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "Invoke RTAFlightHistPipeline",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "ea330fd4-f7fe-4ac6-a828-2922747b5517",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "iterations": {
+                "type": "Array"
+            }
+        },
+        "annotations": [],
+        "lastModifiedByObjectId": "e10fcc43-9abd-4aad-af2d-b6bb7d9e18eb",
+        "lastPublishTime": "2023-06-03T01:01:59Z"
+    }
+}
