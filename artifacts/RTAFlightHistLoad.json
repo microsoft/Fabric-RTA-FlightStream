@@ -1,0 +1,218 @@
+{
+    "name": "RTAFlightHistLoad",
+    "objectId": "e2b1efdd-fa85-4352-86ef-455d1861b81c",
+    "properties": {
+        "activities": [
+            {
+                "name": "ForEach1",
+                "type": "ForEach",
+                "dependsOn": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@pipeline().parameters.hour",
+                        "type": "Expression"
+                    },
+                    "activities": [
+                        {
+                            "name": "Ingest",
+                            "type": "Copy",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DelimitedTextSource",
+                                    "storeSettings": {
+                                        "type": "LakehouseReadSettings",
+                                        "recursive": true,
+                                        "enablePartitionDiscovery": false
+                                    },
+                                    "formatSettings": {
+                                        "type": "DelimitedTextReadSettings"
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "RTAFlightStreamerLh",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "Lakehouse",
+                                                "typeProperties": {
+                                                    "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                                    "artifactId": "f8a13080-852c-40d5-8181-c2bba079a710",
+                                                    "rootFolder": "Files"
+                                                }
+                                            }
+                                        },
+                                        "type": "DelimitedText",
+                                        "typeProperties": {
+                                            "location": {
+                                                "type": "LakehouseLocation",
+                                                "fileName": {
+                                                    "value": "@concat('states_',pipeline().parameters.date,'-',item(),'.csv.gz')",
+                                                    "type": "Expression"
+                                                },
+                                                "folderPath": {
+                                                    "value": "@concat('Sample/OpenskyVectors/',pipeline().parameters.date,'/',item(),'/states_',pipeline().parameters.date,'-',item(),\n    '.csv')",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "columnDelimiter": ",",
+                                            "rowDelimiter": "\n",
+                                            "compressionCodec": "gzip",
+                                            "escapeChar": "\\",
+                                            "firstRowAsHeader": true,
+                                            "quoteChar": "\""
+                                        },
+                                        "schema": []
+                                    }
+                                },
+                                "sink": {
+                                    "type": "KustoDatabaseSink",
+                                    "ingestionMappingName": "",
+                                    "additionalProperties": {
+                                        "value": "@json(concat('{\"creationTime\":\"',string(formatDateTime(pipeline().parameters.date)),'\"}'))",
+                                        "type": "Expression"
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "RTAFlightStreamer",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "KustoDatabase",
+                                                "typeProperties": {
+                                                    "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                                    "endpoint": "https://trd-rjwm9jc98jph5mdjqy.z6.kusto.data.microsoft.com",
+                                                    "database": "7fdf61e2-06d8-4474-a7d5-bcbb585700cc"
+                                                }
+                                            }
+                                        },
+                                        "type": "KustoDatabaseTable",
+                                        "schema": [],
+                                        "typeProperties": {
+                                            "table": "OpenSkyVectorsRaw"
+                                        }
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": true,
+                                        "treatBooleanAsNumber": false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Download",
+                            "description": "https://opensky-network.org/datasets/states/",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "Ingest",
+                                    "dependencyConditions": [
+                                        "Skipped"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "BinarySource",
+                                    "storeSettings": {
+                                        "type": "HttpReadSettings",
+                                        "requestMethod": "GET"
+                                    },
+                                    "formatSettings": {
+                                        "type": "BinaryReadSettings",
+                                        "compressionProperties": {
+                                            "type": "TarReadSettings"
+                                        }
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "type": "Binary",
+                                        "typeProperties": {
+                                            "location": {
+                                                "type": "HttpServerLocation",
+                                                "relativeUrl": {
+                                                    "value": "@concat(\n    pipeline().parameters.date,'/',\n    item(),\n    '/states_',pipeline().parameters.date,'-',item(),\n    '.csv.tar')",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "compression": {
+                                                "type": "tar"
+                                            }
+                                        },
+                                        "externalReferences": {
+                                            "connection": "d2b9841c-3432-4521-ab3d-9c80841e4f24"
+                                        }
+                                    }
+                                },
+                                "sink": {
+                                    "type": "BinarySink",
+                                    "storeSettings": {
+                                        "type": "LakehouseWriteSettings"
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "RTAFlightStreamerLh",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "Lakehouse",
+                                                "typeProperties": {
+                                                    "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                                    "artifactId": "f8a13080-852c-40d5-8181-c2bba079a710",
+                                                    "rootFolder": "Files"
+                                                }
+                                            }
+                                        },
+                                        "type": "Binary",
+                                        "typeProperties": {
+                                            "location": {
+                                                "type": "LakehouseLocation",
+                                                "folderPath": "Sample/OpenskyVectors"
+                                            }
+                                        }
+                                    }
+                                },
+                                "enableStaging": false
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "parameters": {
+            "hour": {
+                "type": "array"
+            },
+            "date": {
+                "type": "string"
+            }
+        },
+        "variables": {
+            "date": {
+                "type": "String"
+            }
+        },
+        "annotations": [],
+        "lastModifiedByObjectId": "e10fcc43-9abd-4aad-af2d-b6bb7d9e18eb",
+        "lastPublishTime": "2023-06-03T01:30:29Z"
+    }
+}
