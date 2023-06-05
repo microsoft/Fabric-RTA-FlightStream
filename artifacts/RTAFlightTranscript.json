@@ -1,0 +1,166 @@
+{
+    "name": "RTAFlightTranscript",
+    "objectId": "16d6ee59-1c8e-4fc3-a0cd-bc029bbd73b7",
+    "properties": {
+        "activities": [
+            {
+                "name": "Get",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "download",
+                        "dependencyConditions": [
+                            "Skipped"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "relativeUrl": "3/short/decorate/link",
+                    "method": "GET"
+                },
+                "externalReferences": {
+                    "connection": "9485a0c7-b271-449f-9937-371f5d913797"
+                }
+            },
+            {
+                "name": "download",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach1",
+                        "dependencyConditions": [
+                            "Skipped"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "BinarySource",
+                        "storeSettings": {
+                            "type": "HttpReadSettings",
+                            "requestMethod": "GET"
+                        },
+                        "formatSettings": {
+                            "type": "BinaryReadSettings"
+                        },
+                        "datasetSettings": {
+                            "annotations": [],
+                            "type": "Binary",
+                            "typeProperties": {
+                                "location": {
+                                    "type": "HttpServerLocation",
+                                    "relativeUrl": "api/3/short/decorate/link"
+                                }
+                            },
+                            "externalReferences": {
+                                "connection": "07fa8d9e-de50-4ae9-ad46-444273047793"
+                            }
+                        }
+                    },
+                    "sink": {
+                        "type": "BinarySink",
+                        "storeSettings": {
+                            "type": "LakehouseWriteSettings"
+                        },
+                        "datasetSettings": {
+                            "annotations": [],
+                            "linkedService": {
+                                "name": "RTAFlightStreamerLh",
+                                "properties": {
+                                    "annotations": [],
+                                    "type": "Lakehouse",
+                                    "typeProperties": {
+                                        "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                        "artifactId": "f8a13080-852c-40d5-8181-c2bba079a710",
+                                        "rootFolder": "Files"
+                                    }
+                                }
+                            },
+                            "type": "Binary",
+                            "typeProperties": {
+                                "location": {
+                                    "type": "LakehouseLocation",
+                                    "folderPath": "Sample/FlightTranscriptRaw"
+                                }
+                            }
+                        }
+                    },
+                    "enableStaging": false
+                }
+            },
+            {
+                "name": "make i",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "typeProperties": {
+                    "variableName": "i",
+                    "value": {
+                        "value": "@range(0,99999)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "ForEach1",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "make i",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@variables('i')",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 1,
+                    "activities": [
+                        {
+                            "name": "RTAFlightTranscriptRaw",
+                            "type": "TridentNotebook",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "notebookId": "e1a402fa-fbf5-40d0-b21b-b46343a8ddd4",
+                                "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                "capacityId": "4b8889a4-0b47-433b-a00b-b227955e5e5f"
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "i": {
+                "type": "Array"
+            }
+        },
+        "annotations": [],
+        "lastModifiedByObjectId": "e10fcc43-9abd-4aad-af2d-b6bb7d9e18eb",
+        "lastPublishTime": "2023-06-05T01:50:37Z"
+    }
+}
