@@ -1,0 +1,148 @@
+////// Tab 1 - custom stream //////
+
+//#connect cluster('trd-ut10d2z5bjhvq8t40a.z6.kusto.data.microsoft.com').database('demo')
+
+demo
+| take 100
+
+demo
+| count
+
+
+demo
+| summarize IngestionCount = count() by bin(ingestion_time(), 1h)
+
+
+demo
+| take 10
+
+
+// timechart
+demo
+| summarize arg_max(uv,temperature,humidity) 
+
+demo
+| summarize avg(uv),avg(temperature),avg(humidity)
+
+demo
+| make-series max(uv) on timestamp step 1s
+| render timechart 
+
+demo 
+| where timestamp > ago(10m)
+| summarize avg(temperature) by bin(timestamp,1s)
+| render timechart  
+
+
+////// Tab 2 - Backfill Hist //////
+
+// #connect @OpenSkyKdb/OpenSkyKdb
+
+// #connect @RTAFlightStreamer/RTAFlightStreamer
+
+OpenSkyVectorsRaw
+| count
+
+OpenSkyVectorsRaw
+| take 10 
+
+OpenSkyVectorsRaw
+| project h=datetime_part('hour',unixtime_seconds_todatetime(['time'])), d=datetime_part('day',unixtime_seconds_todatetime(['time']))
+| summarize count() by d,h
+
+
+
+
+// sample source: https://opensky-network.org/datasets/states/2020-05-25/00/states_2020-05-25-00.csv.tar
+
+// pipeline dates
+// ["2020-05-25","2020-06-01","2020-06-08","2020-06-15","2020-06-22","2020-06-29","2020-07-06","2020-07-13","2020-08-17","2020-08-24","2020-08-31","2020-09-07","2020-09-14","2020-09-21","2020-09-28","2020-10-05","2020-10-12","2020-10-19","2020-10-26","2020-11-02","2020-11-09","2020-11-16","2020-11-23","2020-11-30","2020-12-07","2020-12-14","2020-12-21","2020-12-28","2021-01-04","2021-01-11","2021-01-18","2021-01-25","2021-02-01","2021-02-08","2021-02-15","2021-02-22","2021-03-01","2021-03-08","2021-03-15","2021-03-22","2021-03-29","2021-04-05","2021-04-12","2021-04-19","2021-04-26","2021-05-03","2021-05-10","2021-05-17","2021-05-24","2021-05-31","2021-06-07","2021-06-14","2021-06-21","2021-06-28","2021-07-05","2021-07-12","2021-07-19","2021-07-26","2021-08-02","2021-08-09","2021-08-16","2021-08-23","2021-08-30","2021-09-06","2021-09-13","2021-09-20","2021-09-27","2021-10-04","2021-10-11","2021-10-18","2021-10-25","2021-11-01","2021-11-08","2021-11-15","2021-11-22","2021-11-29","2021-12-06","2021-12-13","2021-12-20","2021-12-27","2022-01-03","2022-01-10","2022-01-17","2022-01-24","2022-01-31","2022-02-07","2022-02-14","2022-02-21","2022-02-28","2022-03-07","2022-03-14","2022-03-21","2022-03-28","2022-04-04","2022-04-11","2022-04-18","2022-04-25","2022-05-02","2022-05-09","2022-05-16","2022-05-23","2022-05-30","2022-06-06","2022-06-13","2022-06-20"]
+
+// pipeline hours
+// ["00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
+
+// count of files: 105days*24hrs = 2520 files need to ingest in parrallel.
+// wildcard source: https://opensky-network.org/datasets/states/{yyyy-mm-dd}/{hh}/states_{yyyy-mm-dd-hh}.csv.tar
+// pipeline dynamic: @concat('https://opensky-network.org/datasets/states/', pipeline().parameters.date,'/', item(), '/states_',pipeline().parameters.date,'-',item(),'.csv.tar')
+
+
+//backfilling
+OpenSkyVectorsRaw
+| summarize count() by ingestion_time()
+| where count_>1 and $IngestionTime < ago(365d)
+
+print now()
+
+.show cluster
+
+.show commands-and-queries | where StartedOn >ago(30m)
+
+// backfilling with creationTime inline.
+.set-or-append OpenSkyVectorsRaw with (creationTime="2020-12-19") <| 
+OpenSkyVectorsRaw
+| where ingestion_time() >ago(9m)
+| count
+
+.show commands-and-queries | take 10
+
+.show table OpenSkyVectorsRaw extents with (creationTime="2020-06-01") | count
+
+.show table OpenSkyVectorsRaw extents details
+| project MaxCreatedOn, MinCreatedOn
+| summarize count() by MaxCreatedOn, MinCreatedOn
+
+
+OpenSkyVectors
+| count
+
+
+.create-or-alter function with (docstring = "Gets Opensky State Vectors",folder = "Data.Cleansing") GetOpenSkyVectors() {
+OpenSkyVectorsRaw
+| extend CallSign      = trim_end(@"[^\w]+",callsign) // remove spaces
+        ,TimeStamp     = unixtime_seconds_todatetime(['time'])
+        ,lastcontact   = unixtime_seconds_todatetime(lastcontact)
+        ,lastposupdate = unixtime_seconds_todatetime(lastposupdate)
+| project-away ['time'] 
+| where  isnotempty(icao24) 
+    and  (isnotempty(lon) and isnotempty(lat)) 
+    and  isnotempty(CallSign) 
+| project TimeStamp, icao24, lat, lon, velocity, heading, vertrate, callsign, onground, alert, spi
+         ,squawk,baroaltitude,geoaltitude,lastposupdate,lastcontact,CallSign
+}
+
+
+////// Tab 3 - RTAFlightStreamer //////
+
+// https://loripsum.net/api/3/decorate/link
+
+.set-or-append FlightTranscriptRaw <|
+let x=datatable(transcript:string)[
+"<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Haec para/doca illi, nos admirabilia dicamus. At iam decimum annum in spelunca iacet. Duo Reges: constructio interrete. Ratio quidem vestra sic cogit. Paulum, cum regem Persem captum adduceret, eodem flumine invectio? Iam doloris medicamenta illa Epicurea tamquam de narthecio proment: Si gravis, brevis; Sed quid ages tandem, si utilitas ab amicitia, ut fit saepe, defecerit? Aliter homines, aliter philosophos loqui putas oportere? <b>Sed plane dicit quod intellegit.</b> <b>Rationis enim perfectio est virtus;</b> </p><p>Itaque rursus eadem ratione, qua sum paulo ante usus, haerebitis. Sed quot homines, tot sententiae; <a href='http://loripsum.net/' target='_blank'>Falli igitur possumus.</a> <a href='http://loripsum.net/' target='_blank'>Sed residamus, inquit, si placet.</a> Primum cur ista res digna odio est, nisi quod est turpis? Rationis enim perfectio est virtus; </p><p><a href='http://loripsum.net/' target='_blank'>Quid ergo hoc loco intellegit honestum?</a> Quis est autem dignus nomine hominis, qui unum diem totum velit esse in genere isto voluptatis? <b>Sed tamen intellego quid velit.</b> His similes sunt omnes, qui virtuti student levantur vitiis, levantur erroribus, nisi forte censes Ti. Itaque contra est, ac dicitis; Huius, Lyco, oratione locuples, rebus ipsis ielunior. Aut haec tibi, Torquate, sunt vituperanda aut patrocinium voluptatis repudiandum. Sed eum qui audiebant, quoad poterant, defendebant sententiam suam. Bona autem corporis huic sunt, quod posterius posui, similiora. At enim, qua in vita est aliquid mali, ea beata esse non potest. </p>"];
+x
+| project recorded=now(), transcript
+
+FlightTranscriptRaw
+| take 10
+
+
+
+////// Tab 4 - Backfill //////
+
+// backfilling with creationTime
+
+.show table OpenSkyVectorsRaw extents details
+| project MaxCreatedOn, MinCreatedOn
+| summarize count() by MaxCreatedOn, MinCreatedOn
+
+
+// inline
+.set-or-append OpenSkyVectorsRaw with (creationTime="2020-12-19") <| 
+OpenSkyVectorsRaw
+| where ingestion_time() >ago(9m)
+| count
+
+
+.show commands-and-queries | take 10
+
+
+.show table OpenSkyVectorsRaw extents with (creationTime="2020-06-01") | count
