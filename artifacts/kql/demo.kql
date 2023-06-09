@@ -1,0 +1,39 @@
+//***********************************************************************************************************
+// Here are two articles to help you get started with KQL:
+// KQL reference guide - https://aka.ms/KQLguide
+// SQL - KQL conversions - https://aka.ms/sqlcheatsheet
+//***********************************************************************************************************
+
+// Use "take" to view a sample number of records in the table and check the data.
+demo
+| take 100
+
+// See how many records are in the table.
+demo
+| count
+
+// This query returns the number of ingestions per hour in the given table.
+demo
+| summarize IngestionCount = count() by bin(ingestion_time(), 1h)
+
+
+// Use 'take' to view a sample number of records in the table and check the data.
+demo
+| take 10
+
+
+// timechart
+demo
+| summarize arg_max(uv,temperature,humidity) 
+
+demo
+| summarize avg(uv),avg(temperature),avg(humidity)
+
+demo
+| make-series max(uv) on timestamp step 1s
+| render timechart 
+
+demo 
+// | where timestamp > ago(10m)
+| summarize avg(temperature) by bin(timestamp,1s)
+| render timechart  
