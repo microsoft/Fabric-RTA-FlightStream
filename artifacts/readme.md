@@ -1,4 +1,4 @@
-# artifacts
+# Artifacts 📜
 
 [notebooks](/notebooks) - custom apps to eventstream as realtime feeds
 [pipelines](/pipelines) - used for loading historical data to backfill and also orchestration of source streams (notebooks custom apps to eventstream as realtime feeds)
