@@ -1,0 +1,459 @@
+// INSTRUCTIONS: Scroll donw to the good stuff is in Tab 6 - Demo Script.
+
+////////////////////////////////////////
+// Tab 1 - FlightStreamerCreateTables //
+////////////////////////////////////////
+
+.execute database script <|
+.create-merge table OpenSkyVectorsRaw (['time']:real, icao24:string, lat:real, lon:real, velocity:real, heading:real, vertrate:real, callsign:string, onground:bool, alert:bool, spi:bool, squawk:long, baroaltitude:real, geoaltitude:real, lastposupdate:real, lastcontact:real) with (folder = "Data.Medallion.Bronze") 
+.create-or-alter table OpenSkyVectorsRaw ingestion csv mapping 'OpenSkyVectorsRaw_mapping'
+```
+[{"Properties":{"Ordinal":"0"},"column":"time","datatype":""},{"Properties":{"Ordinal":"1"},"column":"icao24","datatype":""},{"Properties":{"Ordinal":"2"},"column":"lat","datatype":""},{"Properties":{"Ordinal":"3"},"column":"lon","datatype":""},{"Properties":{"Ordinal":"4"},"column":"velocity","datatype":""},{"Properties":{"Ordinal":"5"},"column":"heading","datatype":""},{"Properties":{"Ordinal":"6"},"column":"vertrate","datatype":""},{"Properties":{"Ordinal":"7"},"column":"callsign","datatype":""},{"Properties":{"Ordinal":"8"},"column":"onground","datatype":""},{"Properties":{"Ordinal":"9"},"column":"alert","datatype":""},{"Properties":{"Ordinal":"10"},"column":"spi","datatype":""},{"Properties":{"Ordinal":"11"},"column":"squawk","datatype":""},{"Properties":{"Ordinal":"12"},"column":"baroaltitude","datatype":""},{"Properties":{"Ordinal":"13"},"column":"geoaltitude","datatype":""},{"Properties":{"Ordinal":"14"},"column":"lastposupdate","datatype":""},{"Properties":{"Ordinal":"15"},"column":"lastcontact","datatype":""}]
+```
+.create-merge table OpenSkyVectors (TimeStamp:datetime, icao24:string, lat:real, lon:real, velocity:real, heading:real, vertrate:real, callsign:string, onground:bool, alert:bool, spi:bool, squawk:long, baroaltitude:real, geoaltitude:real, lastposupdate:datetime, lastcontact:datetime, CallSign:string) with (folder = "Data.Medallion.Silver") 
+.create-merge table CanadianProvinces (['type']:string, geometry_coordinates:dynamic, geometry_type:string, properties_prov_type:string, properties_prov_area_code:string, properties_prov_name_en:string, properties_geo_point_2d:dynamic, properties_prov_code:string, properties_prov_name_fr:string, properties_year:string) with (folder = "Data.Reference.Geospatial") 
+.create-or-alter table CanadianProvinces ingestion json mapping 'CanadianProvinces_mapping'
+```
+[{"Properties":{"Path":"$['type']"},"column":"type","datatype":""},{"Properties":{"Path":"$['geometry']['coordinates']"},"column":"geometry_coordinates","datatype":""},{"Properties":{"Path":"$['geometry']['type']"},"column":"geometry_type","datatype":""},{"Properties":{"Path":"$['properties']['prov_type']"},"column":"properties_prov_type","datatype":""},{"Properties":{"Path":"$['properties']['prov_area_code']"},"column":"properties_prov_area_code","datatype":""},{"Properties":{"Path":"$['properties']['prov_name_en']"},"column":"properties_prov_name_en","datatype":""},{"Properties":{"Path":"$['properties']['geo_point_2d']"},"column":"properties_geo_point_2d","datatype":""},{"Properties":{"Path":"$['properties']['prov_code']"},"column":"properties_prov_code","datatype":""},{"Properties":{"Path":"$['properties']['prov_name_fr']"},"column":"properties_prov_name_fr","datatype":""},{"Properties":{"Path":"$['properties']['year']"},"column":"properties_year","datatype":""}]
+```
+.create-or-alter function with (folder = "Data.Cleansing", docstring = "Gets Opensky State Vectors", skipvalidation = "true") GetOpenSkyVectors() {
+OpenSkyVectorsRaw
+//== Begin Data Quality routines ============================================================================
+| extend CallSign      = trim_end(@"[^\w]+",callsign) // Cleaning up the callsigns for rogue spaces
+        ,TimeStamp     = unixtime_seconds_todatetime(['time']) // converting from epoch to timestamp
+        ,lastcontact   = unixtime_seconds_todatetime(lastcontact)
+        ,lastposupdate = unixtime_seconds_todatetime(lastposupdate)
+| project-away ['time'] // removing that column, not going to be used        
+| where  isnotempty(icao24) // Removing blanks ICAO numbers
+    and  (
+            isnotempty(lon) 
+                and  
+            isnotempty(lat)
+         ) // removing sightings with no lat or lon
+    and  isnotempty(CallSign) // removing empty callsigns    
+//== End Data Quality routines ==============================================================================
+| project TimeStamp, icao24, lat, lon, velocity, heading, vertrate, callsign, onground, alert, spi
+         ,squawk,baroaltitude,geoaltitude,lastposupdate,lastcontact,CallSign
+}
+.create-or-alter function with (folder = "Data.Visualization", docstring = "Gets a flight track for a callsign and optional interplation.Wraps the code used for visualization purposes.", skipvalidation = "true") GetFlightTrack(MyCallSign:string, MyInterpolationFlag:bool, MyTimeResolution:string) {
+OpenSkyVectors
+| where     onground == false and CallSign == toupper(MyCallSign)
+| make-series 
+         FlightTrackLon = max(lon) default=real(null)
+        ,FlightTrackLat = max(lat) default=real(null) 
+        on TimeStamp 
+        step totimespan(MyTimeResolution) 
+        by CallSign 
+| extend FlightTrackLon = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLon),FlightTrackLon)
+        ,FlightTrackLat = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLat),FlightTrackLat)            
+| mv-expand 
+         TimeStamp to typeof(datetime)
+        ,FlightTrackLon to typeof(real)
+        ,FlightTrackLat to typeof(real)
+| where isnotnull(FlightTrackLat) and isnotnull(FlightTrackLon)         
+| summarize 
+         Longitude = max(FlightTrackLon)
+        ,Latitude  = max(FlightTrackLat) 
+by TimeStamp, CallSign
+}
+.create-or-alter function with (folder = "Data.Visualization.Param", docstring = "a list of parameters for the callsigns", skipvalidation = "true") GetCallSigns() {
+let MyCallSigns = datatable (callsign:string)
+["ACA58", "ACA159"];
+MyCallSigns
+}
+.create-or-alter function with (folder = "Data.Visualization.Param", docstring = "a list of parameters for the Time resolution", skipvalidation = "true") GetTimeResolutions() {
+let MyTimeResolutions = datatable (TimeResolution:string)
+["2m", "1m", "30s", "10s"];
+MyTimeResolutions
+}
+.create-or-alter function with (folder = "Data.Visualization.Param", docstring = "a list of parameters for the Interpolation flag", skipvalidation = "true") GetInterpolationFlag() {
+let MyInterpolationFlags = datatable (InterpolationFlag:bool )
+[TRUE,FALSE];
+MyInterpolationFlags
+}
+.create-or-alter function with (folder = "Data.Visualization", docstring = "a quick stat of a particular flight", skipvalidation = "true") GetFlightStat(MyCallsign:string) {
+OpenSkyVectors
+| where     CallSign == MyCallsign
+| where     onground == false
+| summarize  AverageInstrumentAltMeters = round(avg(baroaltitude),0)
+            ,AverageGPSAltMeters        = round(avg(geoaltitude) ,0) 
+            ,WheelsUpTime         = min(TimeStamp)
+            ,WheelsDownTime       = max(TimeStamp)
+             by CallSign
+| extend 
+             AverageInstrumentAltFeet = round(convert_length(AverageInstrumentAltMeters, 'Meter', 'Foot'),0)
+            ,AverageGPSAltFeet        = round(convert_length(AverageGPSAltMeters       , 'Meter', 'Foot'),0)
+            ,FlightTimeMinutes      = datetime_diff('minute',WheelsDownTime,WheelsUpTime)
+}
+.create-or-alter function with (folder = "Data.Visualization", docstring = "Altitude and Airspeed in flight for a particular callsign", skipvalidation = "true") GetFlightPerformance(MyCallSign:string, MyInterpolationFlag:bool, MyTimeResolution:string) {
+OpenSkyVectors
+| where     onground == false and CallSign == toupper(MyCallSign)
+| make-series 
+         AvgSpeedKph = avg(convert_speed(velocity,'MeterPerSecond','KilometerPerHour')) default = real(null) 
+        ,AvgGpsAltImp = avg(round(convert_length(geoaltitude, 'Meter', 'Foot'),0)) default = real(null)
+        on TimeStamp step totimespan(MyTimeResolution) by CallSign
+| extend 
+         AvgSpeedKph = iif(MyInterpolationFlag==true,series_fill_linear(AvgSpeedKph),AvgSpeedKph)
+        ,AvgGpsAltImp = iif(MyInterpolationFlag==true,series_fill_linear(AvgGpsAltImp), AvgGpsAltImp)
+| mv-expand 
+         TimeStamp    to typeof(datetime)
+        ,AvgSpeedKph  to typeof(real)
+        ,AvgGpsAltImp to typeof(real)
+| where isnotnull(AvgGpsAltImp) and isnotnull(AvgSpeedKph)
+}
+// Creating the reference table, associated mapping and Ingestion of reference data
+.execute database script <|
+.create-merge table WorldsAirports (['type']:string, features:dynamic) with (docstring= "a reference table with all the world's airports", folder = "Reference data") 
+.create-or-alter table WorldsAirports ingestion json mapping 'WorldsAirports_mapping'
+```
+[{"Properties":{"Path":"$['type']"},"column":"type","datatype":""},{"Properties":{"Path":"$['features']"},"column":"features","datatype":""}]
+```
+// todo: For expediency, hosting this in KustoPM POC sub but need a more formal hosting place
+.ingest async into table WorldsAirports ('https://gillescsesa.blob.core.windows.net/publicdatasets/geojson/WorldsAirports/osm-world-airports%40babel.geojson?sp=r&st=2023-06-05T18:27:01Z&se=2030-06-06T02:27:01Z&spr=https&sv=2022-11-02&sr=b&sig=BjP6S3L3Nlw7tQxwrNxbo1r%2B%2BTmk9gSdBAo0C9qXBJs%3D')  with (format='json',ingestionMappingReference='WorldsAirports_mapping',ingestionMappingType='json')
+// ======================================================================================================================
+// == Next we create a function to compute the noise exlusion ring. We could have made this into a real table but the perf is good as it is because Kusto is awesome! 
+.create-or-alter function 
+    with (docstring= "a function that calculates the noise mitigation ring around an airport using the world's airports reference data"
+        , folder = "Data.Reference"
+         ) 
+    GetAllNoiseExclusionRings(
+                                MyExclusionResolution:int // H3 Cell resolution paramater
+                             )
+    {
+        WorldsAirports
+        // extracting relevant data
+        | mv-expand MyFeatures = features
+        | project-away features, type
+        | extend Latitude        = toreal(MyFeatures.geometry.coordinates.[1])
+                ,Longitude       = toreal(MyFeatures.geometry.coordinates.[0])
+                ,AirportIcaoCode = tostring(MyFeatures.properties.icao)
+                ,AirportIataCode = tostring(MyFeatures.properties.iata)
+                ,AirportName     = tostring(MyFeatures.properties.name)
+                ,AirportCountry  = tostring(MyFeatures.properties.country)
+        // computing the center h3 cell with resolution =  6        
+        | extend AirportH3Cell = geo_point_to_h3cell(Longitude, Latitude,MyExclusionResolution)
+        //test where clause, comment when ready to go full size
+        //| where AirportIataCode =='EWR'
+        | project-away MyFeatures // cleaning up
+        | extend NoiseExclusionRing = geo_h3cell_rings(AirportH3Cell,1) // getting the ring cells around the center cell
+        | mv-apply NoiseExclusionRing on
+                    (
+                        summarize NoiseExclusionRing=make_list(NoiseExclusionRing)
+                    )
+        | mv-expand NoiseExclusionRing to typeof(string)
+        | where NoiseExclusionRing != AirportH3Cell // excluding the center cell because we want the ring only
+        | project  Latitude       
+                  ,Longitude      
+                  ,AirportIcaoCode
+                  ,AirportIataCode
+                  ,AirportName    
+                  ,AirportCountry
+                  ,NoiseExclusionRing
+    } 
+// We create a slight variation using a specific aircode params    
+.create-or-alter function 
+    with (docstring= "a function that calculates the noise mitigation ring around a specific airport using the world's airports reference data"
+        , folder = "Data.Reference"
+         ) 
+    GetNoiseExclusionRingsByIataCode(
+                                      MyExclusionResolution:int // H3 Cell resolution paramater
+                                     ,MyIataCode: string // 3 letter code for the airport (e.g. EWR = Newark airport)
+                                     )
+    {
+        WorldsAirports
+        // extracting relevant data
+        | mv-expand MyFeatures = features
+        | project-away features, type
+        | extend Latitude        = toreal(MyFeatures.geometry.coordinates.[1])
+                ,Longitude       = toreal(MyFeatures.geometry.coordinates.[0])
+                ,AirportIcaoCode = tostring(MyFeatures.properties.icao)
+                ,AirportIataCode = tostring(MyFeatures.properties.iata)
+                ,AirportName     = tostring(MyFeatures.properties.name)
+                ,AirportCountry  = tostring(MyFeatures.properties.country)
+        | where AirportIataCode == MyIataCode
+        // computing the center h3 cell with param resolution 
+        | extend AirportH3Cell = geo_point_to_h3cell(Longitude, Latitude,MyExclusionResolution)
+        //test where clause, comment when ready to go full size
+        //| where AirportIataCode =='EWR'
+        | project-away MyFeatures // cleaning up
+        | extend NoiseExclusionRing = geo_h3cell_rings(AirportH3Cell,1) // getting the ring cells around the center cell
+        | mv-apply NoiseExclusionRing on
+                    (
+                        summarize NoiseExclusionRing=make_list(NoiseExclusionRing)
+                    )
+        | mv-expand NoiseExclusionRing to typeof(string)
+        | where NoiseExclusionRing != AirportH3Cell // excluding the center cell because we want the ring only
+        | project  Latitude       
+                ,Longitude      
+                ,AirportIcaoCode
+                ,AirportIataCode
+                ,AirportName    
+                ,AirportCountry
+                ,NoiseExclusionRing
+    } 
+// Get a flight's details
+.create-or-alter function 
+    with (docstring= "a function that returns a flight details by flight number"
+        , folder = "Data.Visualization"
+         ) 
+    GetFlightDetail(
+                     MyCallSign:string // the string representing the plane's call sign (e.g. CallSign == "ACA58" represents Air Canada Flight 58)
+                    ,MyStarTime:datetime // start time of the query
+                    ,MyEndTime:datetime // end time of the query
+                    ,MyInterpolationFlag:bool // flag to indicate if we should interpolate missing values
+                    ,MyTimeResolution:string //the bin size for timestamps
+                   )
+    {
+        OpenSkyVectors
+        | where  onground == false and CallSign == toupper(MyCallSign)
+          and TimeStamp between (MyStarTime .. MyEndTime)
+        | make-series 
+                 FlightTrackLon = max(lon) default=real(null)
+                ,FlightTrackLat = max(lat) default=real(null)
+                ,AvgSpeedKph = avg(convert_speed(velocity,'MeterPerSecond','KilometerPerHour')) default = real(null) 
+                ,AvgGpsAltImp = avg(round(convert_length(geoaltitude, 'Meter', 'Foot'),0)) default = real(null)
+                on TimeStamp 
+                step totimespan(totimespan(MyTimeResolution))
+                by CallSign 
+        | extend FlightTrackLon = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLon),FlightTrackLon)
+                ,FlightTrackLat = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLat),FlightTrackLat) 
+                ,AvgSpeedKph = iif(MyInterpolationFlag==true,series_fill_linear(AvgSpeedKph),AvgSpeedKph)
+                ,AvgGpsAltImp = iif(MyInterpolationFlag==true,series_fill_linear(AvgGpsAltImp), AvgGpsAltImp)
+        | mv-expand 
+                 TimeStamp to typeof(datetime)
+                ,FlightTrackLon to typeof(real)
+                ,FlightTrackLat to typeof(real)
+                ,AvgSpeedKph  to typeof(real)
+                ,AvgGpsAltImp to typeof(real)
+        | where isnotnull(FlightTrackLat) and isnotnull(FlightTrackLon)    
+}
+// Example invocation GetFlightDetail("UAL1886",datetime(2022-06-27 00:00:00.0000000),datetime(2022-06-27 00:59:50.0000000),true,'10s')
+// ==================================
+// Get all planes in a given noise exclusion for a given time frame
+.create-or-alter function 
+    with (docstring= "a function that returns all non-compliant flights in a given airport noise restricted zones"
+        , folder = "Data.Visualization"
+         ) 
+    GetNonCompliantFlightsByAirport(
+                                     MyAirPortCode: string // 3 letter iata code from reference table
+                                    ,MyExclusionResolution:int // the h3 cell precision
+                                    ,MyAltitudeMinimumCeiling:long // the altitude the plane must be over to remain compliant
+                                    ,MyStartTime:datetime // start time of the query
+                                    ,MyEndTime:datetime // end time of the query
+                                    ,MyTimeResolution:string //the bin size for timestamps
+                                   )
+    {
+    //todo: Add param handling for null cases so we have default safe values
+    //todo: Make ring size a parameter... for now we hardcode at 6
+    GetNoiseExclusionRingsByIataCode(6,MyAirPortCode)
+    | join kind=inner 
+       (
+        OpenSkyVectors
+        | where  TimeStamp between (MyStartTime .. MyEndTime )
+        | extend VectorH3Cell = geo_point_to_h3cell(lon,lat,MyExclusionResolution)
+        | where  onground == false // planes in the air only
+          and round(convert_length(geoaltitude, 'Meter', 'Foot'),0) < MyAltitudeMinimumCeiling // Planes lower than 2500
+          and sign(vertrate) == 1 // Only planes that are climbing (i.e. positive climb rate in m/s)
+          and sign(round(convert_length(geoaltitude, 'Meter', 'Foot'),0)) == 1 // remove negative altitude reading (bad instrument reading) 
+       ) on $left.NoiseExclusionRing == $right.VectorH3Cell
+    | summarize max(lon), max(lat), AvgAltFeet= avg(convert_length(geoaltitude, 'Meter', 'Foot')) by CallSign, MyTimeBin = bin(TimeStamp,totimespan(MyTimeResolution)), NoiseExclusionRing
+    | order by CallSign, MyTimeBin asc
+    }
+.alter table OpenSkyVectorsRaw policy ingestiontime true
+.alter table OpenSkyVectors policy update "[{\"IsEnabled\":true,\"Source\":\"OpenSkyVectorsRaw\",\"Query\":\"GetOpenSkyVectors\",\"IsTransactional\":false,\"PropagateIngestionProperties\":true}]"
+.alter table OpenSkyVectors policy ingestiontime true
+.alter table CanadianProvinces policy ingestiontime true
+
+
+
+///////////////////////////////
+// Tab 2 - RTAFlightStreamer //
+///////////////////////////////
+
+.show table OpenSkyVectorsRaw ingestion csv mappings 
+
+// Create mapping command
+////////////////////////////////////////////////////////////
+.create table ['OpenSkyVectorsRaw'] ingestion json mapping 'OpenSkyVectorRaw_mapping' '[{"column":"time", "Properties":{"Path":"$[\'time\']"}},{"column":"icao24", "Properties":{"Path":"$[\'icao24\']"}},{"column":"lat", "Properties":{"Path":"$[\'lat\']"}},{"column":"lon", "Properties":{"Path":"$[\'lon\']"}},{"column":"velocity", "Properties":{"Path":"$[\'velocity\']"}},{"column":"heading", "Properties":{"Path":"$[\'heading\']"}},{"column":"vertrate", "Properties":{"Path":"$[\'vertrate\']"}},{"column":"callsign", "Properties":{"Path":"$[\'callsign\']"}},{"column":"onground", "Properties":{"Path":"$[\'onground\']"}},{"column":"alert", "Properties":{"Path":"$[\'alert\']"}},{"column":"spi", "Properties":{"Path":"$[\'spi\']"}},{"column":"baroaltitude", "Properties":{"Path":"$[\'baroaltitude\']"}},{"column":"geoaltitude", "Properties":{"Path":"$[\'geoaltitude\']"}},{"column":"lastposupdate", "Properties":{"Path":"$[\'lastposupdate\']"}},{"column":"lastcontact", "Properties":{"Path":"$[\'lastcontact\']"}}]'
+
+.clear table OpenSkyVectors data 
+
+.clear table OpenSkyVectorsRaw data 
+
+OpenSkyVectorsRaw
+| getschema 
+
+.alter table OpenSkyVectorsHist folder "Data.History"
+
+
+
+///////////////////////////////
+// Tab 3 - RTAFlightStreamer //
+///////////////////////////////
+
+// 3- Checking if the raw data is flowing
+OpenSkyVectorsRaw
+| count 
+
+// 2- Checking that the data transformation is executing
+OpenSkyVectors
+| count 
+
+// 3- We're ready to use this KQL function to feed our Power BI report
+GetAllFlightTrack(true,'10s')
+| where CallSign == 'ACA58'
+
+let CurrentMinStartDate = 
+    toscalar
+    (
+        OpenSkyVectorsHist
+        | extend Timestamp = unixtime_seconds_todatetime(['time'])
+        | order by Timestamp asc 
+        | summarize MinTimeStamp = min(Timestamp)
+    );
+OpenSkyVectorsHist
+| extend ['time']     
+
+OpenSkyVectorsHist
+
+.show commands 
+| where StartedOn >=ago(1d) and CommandType == 'DataIngestPull'
+
+
+| take 1
+
+
+
+///////////////////////////////
+// Tab 4 - RTAFlightStreamer //
+///////////////////////////////
+
+let MyAltitudeThreshold = 2500;
+let EWRExclusionZone = toscalar(NoiseMitigation
+| mv-expand features to typeof(dynamic)
+| project ExclusionZone = features)
+;
+OpenSkyVectors
+| where CallSign =='ACA753'
+| order by TimeStamp asc
+| project TimeStamp, CallSign, lon, lat, geoaltitude
+| extend tt= geo_point_in_polygon(lon,lat,EWRExclusionZone)
+| extend 
+    PlaneInCompliance = 
+        iif
+           (
+                (
+                    geo_point_in_polygon(lon,lat,EWRExclusionZone) == true
+                //and 
+                    //round(convert_length(geoaltitude, 'Meter', 'Foot'),0) <= MyAltitudeThreshold
+                     )
+            ,false
+            ,true
+            )
+
+
+
+
+////////////////////////////
+// Tab 5 - GeoJsonProcess //
+////////////////////////////
+
+let MyGeoJson = '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"coordinates":[[[-74.20640225226826,40.62581267131324],[-74.22420120074263,40.635818596568214],[-74.24760352188507,40.65407554500027],[-74.22486042105639,40.691324226554116],[-74.19453628661842,40.729551216276775],[-74.24628508125757,40.75352557285595],[-74.35538604320313,40.6178068516148],[-74.24200014921702,40.57601091106454],[-74.21398328587756,40.56749835664158],[-74.20673186242556,40.592532189911765],[-74.2011284897575,40.60079129894936],[-74.20837991320951,40.60604656437246],[-74.20640225226826,40.62581267131324]]],"type":"Polygon"}}]}'
+let MyCoordinates = tostring(tostring(todynamic(MyGeoJson).features.[0].geometry.coordinates));
+let MyPolygon = strcat('{"type":"Polygon","coordinates":',MyCoordinates,"}");
+todynamic(MyPolygon)
+
+
+.show function GetFlightTrack
+
+{
+OpenSkyVectors
+| where     onground == false and CallSign == toupper(MyCallSign)
+| make-series
+         FlightTrackLon = max(lon) default=real(null)
+        ,FlightTrackLat = max(lat) default=real(null)
+        on TimeStamp
+        step totimespan(MyTimeResolution)
+        by CallSign
+| extend FlightTrackLon = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLon),FlightTrackLon)
+        ,FlightTrackLat = iif(MyInterpolationFlag==true,series_fill_linear(FlightTrackLat),FlightTrackLat)
+| mv-expand
+         TimeStamp to typeof(datetime)
+        ,FlightTrackLon to typeof(real)
+        ,FlightTrackLat to typeof(real)
+| where isnotnull(FlightTrackLat) and isnotnull(FlightTrackLon)
+| summarize
+         Longitude = max(FlightTrackLon)
+        ,Latitude  = max(FlightTrackLat)
+by TimeStamp, CallSign
+}
+
+
+
+
+/////////////////////////
+// Tab 6 - Demo Script //
+/////////////////////////
+
+//== General notes:
+//=====================
+// A lot of this uses functions to create the noise mitigation zones. They are derived from known international airport location data
+// See the GetAllNoiseExclusionRings() and GetNoiseExclusionRingsByIataCode() functions for more info. They are used by the functions
+// below. 
+//=====================
+
+//== 3.1 Row count statistics
+.show table OpenSkyVectorsRaw extents 
+| summarize 
+     OriginalSizeSum    = sum(OriginalSize)
+    ,CompressedSizeSum  = sum(CompressedSize)
+    ,RowCountSum        = sum(RowCount)
+| extend 
+      OriginalSizeSum   = format_bytes(OriginalSizeSum,1,'Tb')
+     ,CompressedSizeSum = format_bytes(CompressedSizeSum,1,'Tb')
+
+//== 3.2 Get a timechart view of rowcount by ingestion time binned at 1 hour interval
+OpenSkyVectors
+| extend ActualIngestionTime = ingestion_time()
+| summarize RowCount = count() by MyTimeBins = bin(ActualIngestionTime,1h)
+| render timechart 
+
+//== 3.3 Getting a complete flight track and performance data for a flight
+//== This can be used to visualize in the query experience or to use as the 
+//== basis for a PBI Report. Note this is a function with parameters so for a 
+//== quick demo in PBI the params will be hard coded but a more polished demo 
+//== should use dynamic M parameters as per Dany Hoter's guidance.
+GetFlightDetail("ACA58",datetime(2022-06-20T01:50:00Z),datetime(2022-06-20T14:09:10Z),true,'10s')
+
+//== 3.4 + 3.5 Query to find all non-compliant flights. (see 3.3 for comments about params)
+//== Params are: Airport 3letter code, Alititude ceiling, date range and timespan for bins
+//== note the query finds all the flights for a given airport noise mitigation zone If you want
+//== a single flight, you can use a where clause to filter on one call sign
+GetNonCompliantFlightsByAirport('EWR', 6, 2500, datetime(2022-06-19 00:00:00), datetime(2022-06-19 23:59:59), '2m')
+
+// Example of 3.4 using query rendering
+GetNonCompliantFlightsByAirport("EWR",6,2500,datetime(2022-06-13 00:00:00.0000000),datetime(2022-06-13 23:59:50.0000000),'1m')
+| render scatterchart with(kind=map)
+
+// == 3.6 needs data activator(figma?) to operationalize but one can see how we can use one or more of the functions 
+//== with the appropriate parameters. e.g. we can have a data activator that checks for planes "now" in the EWR WorldsAirports
+//== noise mitigation zone
+
+
+
+///////////////////////////////
+// Tab 7 - RTAFlightStreamer //
+///////////////////////////////
+
+WorldsAirports
+        // extracting relevant data
+        | mv-expand MyFeatures = features
+        | project-away features, type
+        | extend Latitude        = toreal(MyFeatures.geometry.coordinates.[1])
+                ,Longitude       = toreal(MyFeatures.geometry.coordinates.[0])
+                ,AirportIcaoCode = tostring(MyFeatures.properties.icao)
+                ,AirportIataCode = tostring(MyFeatures.properties.iata)
+                ,AirportName     = tostring(MyFeatures.properties.name)
+                ,AirportCountry  = tostring(MyFeatures.properties.country)
+        | extend AirportCountry = iif(isempty(AirportCountry),"N/A", AirportCountry)   
+        | project AirportCountry, AirportIataCode, AirportName, AirportIcaoCode, Latitude, Longitude
