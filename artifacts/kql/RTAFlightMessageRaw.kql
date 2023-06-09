@@ -1,0 +1,158 @@
+////////// Tab 1 - RTAFlightStreamer //////////
+
+//***********************************************************************************************************
+// Here are two articles to help you get started with KQL:
+// KQL reference guide - https://aka.ms/KQLguide
+// SQL - KQL conversions - https://aka.ms/sqlcheatsheet
+//***********************************************************************************************************
+
+// Use "take" to view a sample number of records in the table and check the data.
+RTAFlightMessageRaw
+| take 100
+
+// See how many records are in the table.
+RTAFlightMessageRaw
+| count
+
+// This query returns the number of ingestions per hour in the given table.
+RTAFlightMessageRaw
+| summarize IngestionCount = count() by bin(ingestion_time(), 1h)
+
+
+RTAFlightMessageRaw
+| where ingestion_time() > ago(1h)
+| summarize count() by bin(ingestion_time(), 1m)
+
+
+FlightTranscriptRaw
+| where ingestion_time() > ago(1h)
+| summarize count() by bin(ingestion_time(), 1m)
+| order by $IngestionTime desc
+| top 5 by $IngestionTime
+
+
+
+FlightTranscriptRaw
+| take 100
+
+FlightTranscriptRaw
+| count
+
+.show extents
+| summarize sum(OriginalSize), sum(ExtentSize) by TableName
+| extend compRatio = sum_OriginalSize / sum_ExtentSize
+
+OpenSkyVectors
+| count
+
+.show cluster 
+
+
+
+OpenSkyVectors 
+// | where TimeStamp > datetime(2022-6-18)
+| where callsign =="AAL20"
+// | summarize count() by bin(TimeStamp,1d)
+
+.show queries 
+// Queries from PBI start with KPBI by default 
+// | where ClientActivityId startswith "KPBI"
+// Replace the datetime value with the latest StartedOn value if you want to see new activity
+| where StartedOn >  datetime(2023-06-05T13:51:51.3731176Z)
+// Filtering on queries send by the current user. If you are using a gateway or a PBI dataset as a source, queries may have a different User
+| where User ==current_principal_details().UserPrincipalName
+// The newest queries show last
+| order by StartedOn asc
+// MB will have the memory used on each node, high memory of GB scale can indicate wrong joins
+// format_bytes function show the values as MB, GB, PB etc.
+| extend MB=format_bytes(MemoryPeak)
+// getschema calls are usually not interesting to look at
+| extend Isgetschema=Text has "getschema" 
+// Scanned data is a very important factor in performance.
+| extend ScannedData=format_bytes(tolong(CacheStatistics.Shards.Hot.HitBytes))
+// Also very important is the % of extents that are scanned out of the total # of extents
+| extend ScannedExtentsCount=ScannedExtentsStatistics.ScannedExtentsCount,TotalExtentsCount=ScannedExtentsStatistics.TotalExtentsCount
+| extend ScannedRatio=iff(TotalExtentsCount==0,"",strcat(tostring(round(ScannedRatio=100.*ScannedExtentsCount/TotalExtentsCount,2)),"%"))
+// using fork to create multiple result sets
+| fork
+  Queries=(where Isgetschema==false |  project StartedOn, Duration, TotalCpu,ScannedRatio, MB,Text | order by StartedOn asc)
+  Detail=(project StartedOn,User,State,FailureReason, Duration, TotalCpu,ScannedExtentsCount,TotalExtentsCount,ScannedRatio,
+     Isgetschema, MB, ScannedData, ClientRequestProperties,  ClientActivityId, Text | order by StartedOn asc)
+  Slow=( project Duration, TotalCpu, MB, ScannedData,ScannedRatio,  Text | order by Duration)
+  Summary=(summarize Commands=count(),Queries=count(),DelayCommand=count(),
+    mn=min(StartedOn),mx=max( LastUpdatedOn),TotCPU=sum(TotalCpu),TotDuration=sum(Duration)
+     | extend OveralDuration=(mx-mn)) 
+
+let Planes =OpenSkyVectors
+| where (["TimeStamp"]) > ((datetime(2022-06-20 )))
+| summarize lat=avg(lat),lon=avg(lon) by bin(TimeStamp,1m), ["callsign"]
+| summarize count() by callsign
+| where count_ > 500
+;
+
+OpenSkyVectors
+| where (["TimeStamp"]) > ((datetime(2022-06-20 )))
+| summarize lat=round(avg(lat),4),lon=round(avg(lon),4),Altitude=round(avgif( baroaltitude,baroaltitude >0),0),  by bin(TimeStamp,1m), ["callsign"]
+| where callsign in ("RX07    ","TXLU17  ","ELEC JEP","TXLU05  ","VARU2   ","7777XPML") or callsign startswith "TXL"
+
+OpenSkyVectors
+| getschema
+
+
+////////// Tab 2 - GrantAccess //////////
+
+.add database RTAFlightStreamer ingestors ('aadapp=4fbdfb7b-900b-400e-8288-ab8231e0fbbc;microsoft.com') 'wplushiramsynapse'
+
+.add database RTAFlightStreamer viewers ('aadapp=4fbdfb7b-900b-400e-8288-ab8231e0fbbc;microsoft.com') 'wplushiramsynapse'
+
+.add database RTAFlightStreamer ingestors ('aadapp=47ccfa48-9eab-4f3f-9de3-2692508a74c8;microsoft.com') 'hfpocws1'
+
+.add database RTAFlightStreamer viewers ('aadapp=47ccfa48-9eab-4f3f-9de3-2692508a74c8;microsoft.com') 'hfpocws1'
+
+
+
+////////// Tab 3 - Ingestion Speed //////////
+
+////////////////////
+//  BEFORE SEAN   //
+////////////////////
+
+RTAFlightMessageRaw
+| where ingestion_time() > ago(1h)
+| summarize count() by bin(ingestion_time(), 1m)
+| top 10 by $IngestionTime desc
+// ~80 rows/minute
+
+let _start = toscalar(FlightTranscriptRaw | summarize min(ingestion_time()));
+FlightTranscriptRaw
+| where ingestion_time() < _start+1h
+| summarize count() by bin(ingestion_time(), 1m)
+| top 10 by $IngestionTime desc
+// ~200 rows/minute
+
+let _start = toscalar(OpenSkyVectorsRaw | summarize min(ingestion_time()));
+OpenSkyVectorsRaw
+| where ingestion_time() < _start+1d
+| summarize count() by bin(ingestion_time(), 1m)
+| top 10 by $IngestionTime desc
+// ~37 rows/minute ... training a model to ingest :) lol
+
+///////////////////
+//  AFTER SEAN   //
+///////////////////
+
+FlightTranscriptRaw
+| where ingestion_time() > ago(1h)
+| summarize count() by bin(ingestion_time(), 1m)
+| top 10 by $IngestionTime desc
+// +17M rows/minute
+
+
+OpenSkyVectorsRaw
+| where ingestion_time() between (datetime('6/3/2023') .. datetime('6/5/2023'))
+| summarize count() by bin(ingestion_time(), 1m)
+| top 10 by $IngestionTime desc
+// +24M rows/minute
+
+
+print ('LIKE & SUBSCRIBE!')
