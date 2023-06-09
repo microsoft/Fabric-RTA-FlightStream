@@ -1,0 +1,63 @@
+// WOWm this is a huge table
+OpenSkyVectors
+| count 
+
+// Not fun query
+OpenSkyVectors
+| summarize count() by bin(TimeStamp, 1d)
+| render timechart 
+
+
+// Show number of flights per hour in a specific day 
+OpenSkyVectors
+| where TimeStamp between(datetime(2022-06-06) .. 1d)
+| where not(onground)
+| summarize Flights = dcount(callsign) by bin(TimeStamp, 1h)
+| render timechart 
+
+// Show airports with highest activity
+OpenSkyVectors
+| where TimeStamp between(datetime(2022-06-06) .. 1d)
+| where onground
+| summarize Planes=dcount(callsign) by h3=geo_point_to_h3cell(lon, lat, 5)
+| top 10 by Planes
+| project Airport = geo_h3cell_to_central_point(h3), Planes, Series="Planes"
+| render piechart kind = map 
+
+
+// Show number of Flights per 10 minutes in one of the busiest airports 
+let Amsterdam = dynamic([4.893668, 52.396039]);
+OpenSkyVectors
+| where TimeStamp between(datetime(2022-06-06) .. 1d)
+| where not(onground)
+| extend Airport = geo_point_to_h3cell(lon, lat, 5)
+| where Airport == geo_point_to_h3cell(todouble(Amsterdam[0]), todouble(Amsterdam[1]), 5)
+| summarize Flights = dcount(callsign) by bin(TimeStamp, 10min)
+| render columnchart 
+
+
+
+
+// Airborne planes around one of the busiest airports 
+let Amsterdam = dynamic([4.893668, 52.396039]);
+OpenSkyVectors
+| where TimeStamp between(datetime(2022-06-06) .. 1d)
+| where not(onground)
+| extend PlaneLocation = geo_point_to_h3cell(lon, lat, 5)
+| where PlaneLocation == geo_point_to_h3cell(todouble(Amsterdam[0]), todouble(Amsterdam[1]), 5)
+| where baroaltitude <= 1000
+| summarize dcount(callsign), callsign=any(callsign) by bin(baroaltitude, 100)
+| sort by baroaltitude asc 
+
+
+
+
+// Monitor flight flying below threshold in city center 
+OpenSkyVectors
+| where TimeStamp between(datetime(2022-06-06) .. 1d)
+| where not(onground)
+| where callsign == "KLM42U  "
+| project TimeStamp, Flight_Altitude = baroaltitude
+| extend Threshold_Altitude = 500
+| render timechart 
+
