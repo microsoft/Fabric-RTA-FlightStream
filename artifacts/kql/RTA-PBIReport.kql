@@ -1,0 +1,67 @@
+.show queries 
+// Queries from PBI start with KPBI by default 
+// | where ClientActivityId startswith "KPBI"
+// Replace the datetime value with the latest StartedOn value if you want to see new activity
+| where StartedOn >  datetime(2023-06-06T10:13:35.3369401Z)
+// Filtering on queries send by the current user. If you are using a gateway or a PBI dataset as a source, queries may have a different User
+| where User ==current_principal_details().UserPrincipalName
+// The newest queries show last
+| order by StartedOn asc
+// MB will have the memory used on each node, high memory of GB scale can indicate wrong joins
+// format_bytes function show the values as MB, GB, PB etc.
+| extend MB=format_bytes(MemoryPeak)
+// getschema calls are usually not interesting to look at
+| extend Isgetschema=Text has "getschema" 
+// Scanned data is a very important factor in performance.
+| extend ScannedData=format_bytes(tolong(CacheStatistics.Shards.Hot.HitBytes))
+// Also very important is the % of extents that are scanned out of the total # of extents
+| extend ScannedExtentsCount=ScannedExtentsStatistics.ScannedExtentsCount,TotalExtentsCount=ScannedExtentsStatistics.TotalExtentsCount
+| extend ScannedRatio=iff(TotalExtentsCount==0,"",strcat(tostring(round(ScannedRatio=100.*ScannedExtentsCount/TotalExtentsCount,2)),"%"))
+// using fork to create multiple result sets
+| fork
+  Queries=(where Isgetschema==false |  project StartedOn, Duration, TotalCpu,ScannedRatio, MB,Text | order by StartedOn asc)
+  Detail=(project StartedOn,User,State,FailureReason, Duration, TotalCpu,ScannedExtentsCount,TotalExtentsCount,ScannedRatio,
+     Isgetschema, MB, ScannedData, ClientRequestProperties,  ClientActivityId, Text | order by StartedOn asc)
+  Slow=( project Duration, TotalCpu, MB, ScannedData,ScannedRatio,  Text | order by Duration)
+  Summary=(summarize Commands=count(),Queries=count(),DelayCommand=count(),
+    mn=min(StartedOn),mx=max( LastUpdatedOn),TotCPU=sum(TotalCpu),TotDuration=sum(Duration)
+     | extend OveralDuration=(mx-mn)) 
+
+
+OpenSkyVectors
+| where TimeStamp between( datetime(2022-6-20)..1d)
+| where callsign  in("N773G   ","N215LP  ","N804CP  ","N410CK  ","N512AF  ","N458DB  ","N401TD  ","N935G   ","N528SV  ","N243G   ")
+| where lon between (-77 .. -74) and lat between(39 .. 42)
+//| where isnotnull(baroaltitude)
+| summarize lat=round(avg(lat),6),lon=round(avg(lon),6),Altitude=round(avgif( baroaltitude,baroaltitude >0),0),Velocity=round(avg(velocity),2) by bin(TimeStamp,1m), callsign
+| where (["callsign"] in ("N215LP  ","N243G   ","N401TD  ")) and (["TimeStamp"] in (datetime(2022-06-20 01:11:00.0000000),datetime(2022-06-20 01:12:00.0000000),datetime(2022-06-20 01:13:00.0000000),datetime(2022-06-20 01:00:00.0000000),datetime(2022-06-20 01:14:00.0000000),datetime(2022-06-20 01:01:00.0000000),datetime(2022-06-20 01:02:00.0000000),datetime(2022-06-20 01:15:00.0000000),datetime(2022-06-20 01:03:00.0000000),datetime(2022-06-20 01:04:00.0000000),datetime(2022-06-20 01:05:00.0000000),datetime(2022-06-20 01:06:00.0000000),datetime(2022-06-20 01:07:00.0000000),datetime(2022-06-20 01:08:00.0000000),datetime(2022-06-20 01:09:00.0000000),datetime(2022-06-20 01:10:00.0000000)))
+| summarize ["a0"]=sum(["Altitude"]) by ["lat"], ["lon"]
+| where isnotnull(["a0"])
+| limit 1000001
+
+OpenSkyVectors
+| where TimeStamp between( datetime(2022-6-20)..1d)
+// | where callsign  in("N773G   ","N215LP  ","N804CP  ","N410CK  ","N512AF  ","N458DB  ","N401TD  ","N935G   ","N528SV  ","N243G   ")
+| where lon between (-77 .. -74) and lat between(39 .. 42)
+//| where isnotnull(baroaltitude)
+| summarize lat=round(avg(lat),6),lon=round(avg(lon),6),Altitude=round(avgif( baroaltitude,baroaltitude >0),0),Velocity=round(avg(velocity),2) by bin(TimeStamp,1m), callsign
+| where (["callsign"] in ("N215LP  ","N243G   ","N401TD  ")) and (["TimeStamp"] in (datetime(2022-06-20 01:11:00.0000000),datetime(2022-06-20 01:12:00.0000000),datetime(2022-06-20 01:13:00.0000000),datetime(2022-06-20 01:00:00.0000000),datetime(2022-06-20 01:14:00.0000000),datetime(2022-06-20 01:01:00.0000000),datetime(2022-06-20 01:02:00.0000000),datetime(2022-06-20 01:15:00.0000000),datetime(2022-06-20 01:03:00.0000000),datetime(2022-06-20 01:04:00.0000000),datetime(2022-06-20 01:05:00.0000000),datetime(2022-06-20 01:06:00.0000000),datetime(2022-06-20 01:07:00.0000000),datetime(2022-06-20 01:08:00.0000000),datetime(2022-06-20 01:09:00.0000000),datetime(2022-06-20 01:10:00.0000000)))
+| summarize ["a0"]=sum(["Altitude"]) by ["lat"], ["lon"]
+| where isnotnull(["a0"])
+| limit 1000001
+
+OpenSkyVectors
+| where TimeStamp between( datetime(2022-6-20)..12h)
+// | where callsign  in("N773G   ","N215LP  ","N804CP  ","N410CK  ","N512AF  ","N458DB  ","N401TD  ","N935G   ","N528SV  ","N243G   ")
+| where lon between (-77 .. -74) and lat between(39 .. 42)
+//| where isnotnull(baroaltitude)
+| summarize lat=sum(lat),lon=sum(lon) by bin(TimeStamp,1m), callsign
+| where (["callsign"] in ("N215LP  ","N243G   ","N401TD  ")) and (["TimeStamp"] in (datetime(2022-06-20 01:11:00.0000000),datetime(2022-06-20 01:12:00.0000000),datetime(2022-06-20 01:13:00.0000000),datetime(2022-06-20 01:00:00.0000000),datetime(2022-06-20 01:14:00.0000000),datetime(2022-06-20 01:01:00.0000000),datetime(2022-06-20 01:02:00.0000000),datetime(2022-06-20 01:15:00.0000000),datetime(2022-06-20 01:03:00.0000000),datetime(2022-06-20 01:04:00.0000000),datetime(2022-06-20 01:05:00.0000000),datetime(2022-06-20 01:06:00.0000000),datetime(2022-06-20 01:07:00.0000000),datetime(2022-06-20 01:08:00.0000000),datetime(2022-06-20 01:09:00.0000000),datetime(2022-06-20 01:10:00.0000000)))
+// | summarize count() by ["lat"], ["lon"]
+| limit 1000001
+
+
+OpenSkyVectors
+| where TimeStamp between( datetime(2022-6-20)..1d)
+| where (["callsign"] in ("N215LP  ","N243G   ","N401TD  "))
+| summarize count(),sum(lon) by bin( TimeStamp,1h) 
