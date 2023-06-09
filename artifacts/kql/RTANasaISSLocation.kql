@@ -1,0 +1,28 @@
+////////////////////////////////
+// Tab 1 - RTANasaISSLocation //
+////////////////////////////////
+
+// Thank you Nasa!
+
+NasaISSLocation
+| top 30000 by timestamp desc 
+| project timestamp, iss_position_longitude, iss_position_latitude
+| sort by timestamp asc
+| render scatterchart with(kind=map, xcolumn=iss_position_longitude, ycolumns=iss_position_latitude)
+
+
+/////////////////////
+// Tab 2 - <400ms? //
+/////////////////////
+
+NasaISSLocation
+| extend latency=ingestion_time()-timestamp
+| where latency < timespan(900ms)
+| take 10 
+
+
+NasaISSLocation
+| extend latency=ingestion_time()-timestamp
+| summarize min(latency)
+
+// 850ms: From the moment Spark cleint app polled the http api > sent to eventstream > event stream sent to kusto > kusto ingested.
