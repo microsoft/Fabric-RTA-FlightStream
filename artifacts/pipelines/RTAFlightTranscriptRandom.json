@@ -1,0 +1,161 @@
+{
+    "name": "RTAFlightTranscriptRandom",
+    "objectId": "edff01e9-5110-44c3-85fe-6cd2ff432b6b",
+    "properties": {
+        "activities": [
+            {
+                "name": "make i",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "typeProperties": {
+                    "variableName": "i",
+                    "value": {
+                        "value": "@range(0,99999)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "ForEach1",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "make i",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@variables('i')",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 50,
+                    "activities": [
+                        {
+                            "name": "Transcripts",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "randomURL",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DelimitedTextSource",
+                                    "storeSettings": {
+                                        "type": "HttpReadSettings",
+                                        "requestMethod": "GET"
+                                    },
+                                    "formatSettings": {
+                                        "type": "DelimitedTextReadSettings"
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "type": "DelimitedText",
+                                        "typeProperties": {
+                                            "location": {
+                                                "type": "HttpServerLocation",
+                                                "relativeUrl": {
+                                                    "value": "@variables('url')",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "columnDelimiter": "|",
+                                            "rowDelimiter": "\n",
+                                            "escapeChar": "\\",
+                                            "quoteChar": "\""
+                                        },
+                                        "schema": [],
+                                        "externalReferences": {
+                                            "connection": "07fa8d9e-de50-4ae9-ad46-444273047793"
+                                        }
+                                    }
+                                },
+                                "sink": {
+                                    "type": "KustoDatabaseSink",
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "RTAFlightStreamer",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "KustoDatabase",
+                                                "typeProperties": {
+                                                    "workspaceId": "3582b164-c42f-4707-98ac-a85e3bf6a734",
+                                                    "endpoint": "https://trd-rjwm9jc98jph5mdjqy.z6.kusto.data.microsoft.com",
+                                                    "database": "7fdf61e2-06d8-4474-a7d5-bcbb585700cc"
+                                                }
+                                            }
+                                        },
+                                        "type": "KustoDatabaseTable",
+                                        "schema": [],
+                                        "typeProperties": {
+                                            "table": "FlightTranscriptRaw"
+                                        }
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": true,
+                                        "treatBooleanAsNumber": false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "randomURL",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "variableName": "url",
+                                "value": {
+                                    "value": "@string(\n    variables('sites')[rand(0,length(variables('one')))]\n)",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "i": {
+                "type": "Array"
+            },
+            "sites": {
+                "type": "Array",
+                "defaultValue": [
+                    "api/6000/decorate/links",
+                    "api/6000/short/plaintext",
+                    "api/6000/long/plaintext"
+                ]
+            },
+            "url": {
+                "type": "String"
+            },
+            "one": {
+                "type": "String",
+                "defaultValue": "[1,2,3]"
+            }
+        },
+        "annotations": [],
+        "lastModifiedByObjectId": "e10fcc43-9abd-4aad-af2d-b6bb7d9e18eb",
+        "lastPublishTime": "2023-06-12T20:39:41Z"
+    }
+}
