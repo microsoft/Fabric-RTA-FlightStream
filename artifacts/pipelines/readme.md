@@ -10,7 +10,7 @@
 
 ### Strings - dialog dataset
 * _Transcript_ is stream simulation of dialog between pilots & tower, _TranscriptRandom_ is like a historical load but using 1 of 3 relative url(s) of Lorem Ipsums at random.
-* Warning: guids as strings provide very uneffective parquet compression.
+* Warning: not included above, but be aware that guids as strings provide very uneffective parquet compression.
 
 
 ### Note
