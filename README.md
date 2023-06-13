@@ -34,7 +34,7 @@ This is but a small sample of the air traffic in the area. What if we could auto
 
 With the power of the KQL language and its native geospatial functions, we can now detect in real time the aircrafts that are non-compliant.
 
-#### 4. Advanced Geospatial Monitoring at Petabyte (PB) scale
+#### 4. Actions
 
 Additionally, we can display geojson shapes around areas; for example, Newark international. Then we can switch to a Microsoft Fabric KQL Queryset that detects violations to raise alerts using Microsoft Fabric Data Activator Reflex.
 
