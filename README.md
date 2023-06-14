@@ -44,6 +44,9 @@ Lastly, we have a KQL Queryset that forecasts the plane’s altitude and uses th
 
 #### Welcome to Real-time Analytics with Microsoft Fabric! 💚
 
+## Architecture (Draft)
+![img](IMG_0889.jpeg)
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
