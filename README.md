@@ -68,5 +68,5 @@ Any use of third-party trademarks or logos are subject to those third-party's po
 
 ## Privacy and Telemetry Notice 
 
-This project does not have source code that enables Microsoft to collect telemetry. This project has only artifact scripts and guidance that can be used to reproduce samples in Microsoft Fabric workspaces, and other Azure Analytics services such as Azure Data Factory, Synapse Analytics, Azure Stream Analytics, Event Hubs and Azure Data Explorer. Microsoft services may collect telemetry for metrics, which are not in scope for this project.
+This project does not have source code that enables Microsoft to collect telemetry. This project has only artifact scripts and guidance that can be used to reproduce samples in Microsoft Fabric workspaces, and/or other Azure Analytics services. Microsoft services may collect telemetry for metrics, which are not in scope for this project.
 
