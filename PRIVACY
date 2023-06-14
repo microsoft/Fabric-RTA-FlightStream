@@ -1,0 +1,13 @@
+## Data Collection. 
+
+The sample scripts provided in this repo do not collect information about you and your use of the software and send it to Microsoft. 
+However, adherent services used to run the sample scripts may depending on your implementation. 
+Microsoft may use this information to provide services and improve our products and services. 
+If you wish to turn off the telemetry please refer to Microsoft Fabric documentation or the documentation of the adherent service you decide to use to run sample scripts provided in this repo. 
+If you enable the samples provided in this repo on your own and Microsoft to collect data from users of your applications, then you must comply with applicable law, 
+including providing appropriate notices to users of your applications together with a copy of Microsoft's privacy statement. 
+
+Our privacy statement is located at https://go.microsoft.com/fwlink/?LinkID=824704. 
+You can learn more about data collection and use in the help documentation and our privacy statement. 
+
+Your use of the software operates as your consent to these practices.
