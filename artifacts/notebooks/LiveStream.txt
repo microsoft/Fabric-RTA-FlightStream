@@ -15,7 +15,7 @@ def main():
     ENDPOINT="https://opensky-network.org/api/states/all"
     #ENDPOINT="https://dog.ceo/api/breeds/list/all"
 
-    producer = EventHubProducerClient.from_connection_string(conn_str="Endpoint=sb://openskyeh.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=OKHDprnd3BLBVWqYagHU9U07LUjG16G3A+AEhGWCtJ0=", eventhub_name="opensky")
+    producer = EventHubProducerClient.from_connection_string(conn_str="", eventhub_name="opensky")
 
     #event_data_batch = producer.create_batch()
 
