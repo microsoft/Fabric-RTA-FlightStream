@@ -26,6 +26,7 @@ def main():
         #event_data_batch.add(i.text)
         #event_data_batch.add(EventData(str(i)))
 
+        #prior to hitting the max by 5k, send the current and recreate batch.
         if event_data_batch.size_in_bytes >= event_data_batch.max_size_in_bytes-5000:
             print("Sending...")
             print(i)
