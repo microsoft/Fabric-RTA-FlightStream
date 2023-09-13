@@ -19,7 +19,7 @@ def main():
 
     event_data_batch = producer.create_batch()
 
-    resp = requests.get(ENDPOINT, auth=('rtauser1', 'enter&d0notMatch'))
+    resp = requests.get(ENDPOINT, auth=('rtauser1', '...'))
     respjson=resp.json()
 
     for i in respjson['states']:
