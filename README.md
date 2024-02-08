@@ -4,10 +4,12 @@
 
 ### Description
 Encompasses a use-case using airline flight data for the following Microsoft Fabric features: 
-1. Eventstream 
-2. Notebook
-3. KQL Database
-4. Power BI Report
+1. Pipelines
+2. Lakehouse
+3. Eventstream 
+4. Notebooks
+5. KQL Database
+6. Power BI Report
 
 ### Scenario 
 
